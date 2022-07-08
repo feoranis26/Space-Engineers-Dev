@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>61eba249-19f3-48b6-a25b-a4cee90168ba</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>IngameScript</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Logger.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Vectors.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)DebugAPI.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Extensions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)GridInteractions.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Heartbeat.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Motion.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Orientation.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)PidController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Util.cs" />
+  </ItemGroup>
+</Project>
