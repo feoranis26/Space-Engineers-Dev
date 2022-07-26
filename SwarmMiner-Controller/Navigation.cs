@@ -46,6 +46,14 @@ namespace IngameScript
 
             Logger logger;
 
+            public IEnumerator pathfinder;
+            public List<PathfindData> PathfindQueue = new List<PathfindData>();
+            public Dictionary<PathfindData, List<int>> FoundPaths = new Dictionary<PathfindData, List<int>>();
+            public Dictionary<int, long> ReservedNodes = new Dictionary<int, long>();
+            public Dictionary<long, List<int>> NodesReservedByMiner = new Dictionary<long, List<int>>();
+
+            IEnumerator CommandQueueExecuter;
+
             public void Init(Program p, GridUtils g)
             {
                 gridUtils = g;
@@ -63,7 +71,45 @@ namespace IngameScript
             {
                 WorldMatrix = gridUtils.GetBlockWithTag<IMyRemoteControl>("[SWMRoot]").WorldMatrix;
 
-                ExecuteOrders();
+                RunPathfinder();
+                RunCommandQueue();
+            }
+
+            void RunCommandQueue()
+            {
+                if (CommandQueueExecuter == null)
+                    CommandQueueExecuter = ExecuteOrders();
+                else
+                {
+                    if (!CommandQueueExecuter.MoveNext())
+                        CommandQueueExecuter = null;
+                }
+            }
+
+            void RunPathfinder()
+            {
+                if (pathfinder != null)
+                {
+                    if (!pathfinder.MoveNext())
+                    {
+                        pathfinder = null;
+
+                        /*logger.Log($"Pathfinder done!");
+
+                        string pathstr = "";
+                        foreach (int nodeID in FoundPaths.Last().Value)
+                            pathstr += nodeID + ", ";
+                        logger.Log($"Path is {pathstr}");
+                        */
+
+                        PathfindQueue.Remove(FoundPaths.Last().Key);
+                    }
+                }
+                else if (PathfindQueue.Count > 0)
+                {
+                    PathfindData data = PathfindQueue[0];
+                    pathfinder = Pathfinder(GetNode(data.from), GetNode(data.to));
+                }
             }
 
             public void DrawVisuals()
@@ -79,7 +125,7 @@ namespace IngameScript
                         {
                             continue;
                         }
-                        else if (miner.path.HasValue)
+                        else if (miner.path.HasValue && miner.path?.path.Count > 0)
                         {
                             Color color = DateTime.Now.Millisecond < 500 ? Color.Red : Color.Yellow;
 
@@ -136,7 +182,6 @@ namespace IngameScript
                     if (section_name.Split(' ')[0] == "Node")
                         ParseNode(section_name, p);
 
-
                 string[] hDockIDs = p.Get("Config", "HangarDocks").ToString().Split(',');
                 string[] dockIDs = p.Get("Config", "DockNodes").ToString().Split(',');
 
@@ -179,8 +224,9 @@ namespace IngameScript
                 int ID = int.Parse(ini.Get(nodeSection, "NodeID").ToString());
                 int pID = int.Parse(ini.Get(nodeSection, "ParentNodeID").ToString());
                 string dsp_name = ini.Get(nodeSection, "DisplayName").ToString();
+                bool isRamp = ini.Get(nodeSection, "IsRampArea").ToBoolean();
 
-                PathNode node = new PathNode(new LocalPose(Position, Rotation), ID, pID, ReachableNodes, dsp_name);
+                PathNode node = new PathNode(new LocalPose(Position, Rotation), ID, pID, ReachableNodes, dsp_name, isRamp);
 
                 node.DockPBName = ini.Get(nodeSection, "DockName").ToString();
                 node.precision = (ini.Get(nodeSection, "Precision").ToString() != "") ? (float)ini.Get(nodeSection, "Precision").ToDouble() : 8f;
@@ -222,54 +268,68 @@ namespace IngameScript
             }
 
             public List<int> temp_waypoints = new List<int>();
-            public List<int> FindPathTo(PathNode start, PathNode end, long minerID = -1)
+            public IEnumerator<bool> Pathfinder(PathNode start, PathNode end)
             {
-                List<int> ans = new List<int>();
-                ans.Add(start.ID);
+                PathNode current = start;
+                List<int> chked = new List<int>();
 
-                if (start.ID == end.ID)
+                List<int> path = new List<int>();
+
+                path.Clear();
+                //logger.Log("Start pathfinder");
+                //logger.Log($"From {start.ID} to {end.ID}");
+
+                while (current != end)
                 {
-                    temp_waypoints.Clear();
-                    return ans;
-                }
-                if (IsNodeChildrenOf(end.ID, start))
-                {
-                    foreach (int id in start.Children)
+                    path.Add(current.ID);
+                    chked.Add(current.ID);
+                    if (IsNodeChildrenOf(end.ID, current))
                     {
-                        if (!prog.controller.IsNodeOccupied(id) && IsNodeChildrenOf(end.ID, GetNode(id)) && !temp_waypoints.Contains(id) && !NodeHasTraffic(id, minerID))
-                        {
-                            if (end.ID == id)
-                            {
-                                ans.Add(id);
-                                temp_waypoints.Clear();
-                                return ans;
-                            }
-                            else
-                            {
-                                temp_waypoints.Add(id);
+                        //logger.Log($"{end.ID} is a child of {current.ID}");
 
-                                List<int> path = FindPathTo(GetNode(id), end, minerID);
-                                if (path != null)
-                                    return ans.Concat(path).ToList();
+                        foreach (int id in current.Children)
+                        {
+                            if (!chked.Contains(id) && IsNodeChildrenOf(end.ID, GetNode(id)))
+                            {
+                                current = GetNode(id);
+                                break;
                             }
                         }
                     }
-                }
-                else if (start.ParentID != -1)
-                {
-                    if (!prog.controller.IsNodeOccupied(start.ParentID) && !temp_waypoints.Contains(start.ParentID) && !NodeHasTraffic(start.ParentID, minerID))
+                    else if (current.ParentID != -1 && !chked.Contains(current.ParentID))
                     {
+                        //logger.Log($"{end.ID} is not a child of {current.ID}");
+                        //logger.Log($"Going to parent...");
 
-                        temp_waypoints.Add(start.ParentID);
-
-                        List<int> path = FindPathTo(GetNode(start.ParentID), end, minerID);
-                        if (path != null)
-                            return ans.Concat(path).ToList();
+                        current = GetNode(current.ParentID);
                     }
-                }
-                return null;
-            }
+                    else
+                    {
+                        //logger.Log($"{end.ID} is not a child of {current.ID}");
+                        //logger.Log($"{current.ID} has no parent!");
+                        //logger.Log($"No path can be found from {start.ID} to {end.ID}!");
 
+                        FoundPaths.Add(new PathfindData(start.ID, end.ID), null);
+                        yield break;
+                    }
+
+                    /*
+                    string pathstr = "";
+                    foreach (int nodeID in path)
+                        pathstr += nodeID + ", ";
+                    logger.Log($"Path is {pathstr}");
+                    */
+
+                    yield return true;
+                }
+
+                //logger.Log("End pathfinder");
+
+                path.Add(end.ID);
+                FoundPaths.Add(new PathfindData(start.ID, end.ID), path);
+
+                yield break;
+            }
             public int GetEmptyHangarDock(Miner miner)
             {
                 bool dockEmpty;
@@ -299,7 +359,7 @@ namespace IngameScript
                     }
                 }
 
-                return 0;
+                return -1;
             }
 
             public int GetEmptyDock(Miner miner)
@@ -335,7 +395,7 @@ namespace IngameScript
                 return -1;
             }
 
-            void QueueGoto(Miner miner, GlobalPose pose, int? nodeID = null, float precision = 5)
+            void QueueGoto(Miner miner, GlobalPose pose, int nodeID = -1, float precision = 5)
             {
                 string msg = "Goto;";
                 msg += pose.pos.pos.EncodeString() + ";";
@@ -344,8 +404,7 @@ namespace IngameScript
                 msg += rot.forward.EncodeString() + ";";
                 msg += rot.up.EncodeString() + ";";
 
-                if (nodeID.HasValue)
-                    msg += nodeID + ";";
+                msg += nodeID + ";";
 
                 msg += precision.ToString() + ";";
 
@@ -359,19 +418,34 @@ namespace IngameScript
                 return true;
             }
 
-            void CheckPath(Miner miner)
+            Path? TryGetPath(PathNode from, PathNode to, out bool isInProgress)
             {
-                if (miner.TargetWaypointID != -999 && miner.CurrentWaypointID != miner.TargetWaypointID && !miner.busy && !miner.path.HasValue)
-                {
-                    logger.Log($"Attempting to find path for miner {miner.ID}");
-                    temp_waypoints.Clear();
-                    List<int> path = FindPathTo(GetNode(miner.CurrentWaypointID), GetNode(miner.TargetWaypointID), miner.ID);
-                    if(path != null)
-                        miner.path = new Path(path);
-                    else
-                        logger.Log($"No path found!");
+                PathfindData data = new PathfindData(from.ID, to.ID);
+                List<int> path;
+                bool found = FoundPaths.TryGetValue(data, out path);
 
+                if (found)
+                {
+                    if (path != null)
+                    {
+                        isInProgress = false;
+                        return new Path(path);
+                    }
+                    else
+                    {
+                        isInProgress = false;
+                        logger.Log($"No path found!");
+                        return null;
+                    }
                 }
+                else if (!PathfindQueue.Contains(data))
+                {
+                    PathfindQueue.Add(data);
+                    logger.Log($"Attempting to find path from {from.ID} to {to.ID}");
+                }
+
+                isInProgress = true;
+                return null;
             }
 
             bool MoveMiner(MoveOrder o)
@@ -379,17 +453,15 @@ namespace IngameScript
                 if (!prog.controller.IsSafeToMove())
                     return false;
 
-                temp_waypoints.Clear();
-                List<int> path = FindPathTo(GetNode(o.miner.CurrentWaypointID), GetNode(o.nodeID), o.miner.ID);
+                bool pathIsBeingGenerated;
+                Path? p = TryGetPath(GetNode(o.miner.CurrentWaypointID), GetNode(o.nodeID), out pathIsBeingGenerated);
+                bool pathPresent = p != null;
 
-                Path p = new Path(path);
-
-                bool pathPresent = path != null;
-
-                bool ok = pathPresent && IsPathClear(p, o.miner.ID);
+                bool ok = pathPresent && IsPathClear(p.Value, o.miner.ID);
                 if (ok)
                 {
                     o.miner.TargetWaypointID = o.nodeID;
+                    o.miner.path = p;
                     logger.Log($"Starting move of miner {o.miner.ID} to {o.nodeID}");
                 }
                 else if (pathPresent)
@@ -397,25 +469,36 @@ namespace IngameScript
                     o.isObstructed = true;
                     o.displayStatus = "OBSTRUCTED";
                 }
-                else
-                {
-                    prog.display = $"PATH FROM {o.miner.CurrentWaypointID} to {o.nodeID} NOT FOUND!";
+                else if (!pathIsBeingGenerated)
                     o.displayStatus = "NO PATH";
-                }
 
                 return ok;
             }
 
-            void ExecuteOrders()
+
+            IEnumerator<bool> ExecuteOrders()
             {
-                //prog.Echo("Executing orders!");
-                foreach (MoveOrder o in OrderQueue)
+                MoveOrder[] temp_orders = new MoveOrder[100];
+
+                while (true)
                 {
-                    if (MoveMiner(o))
+                    //prog.Echo("Executing orders!");
+                    OrderQueue.CopyTo(temp_orders);
+
+                    foreach (MoveOrder o in temp_orders)
                     {
-                        OrderQueue.Remove(o);
-                        break;
+                        yield return false;
+                        if (o == null)
+                            break;
+
+                        if (MoveMiner(o))
+                        {
+                            OrderQueue.Remove(o);
+                            break;
+                        }
                     }
+
+                    yield return false;
                 }
             }
 
@@ -427,49 +510,133 @@ namespace IngameScript
                 OrderQueue.Add(new MoveOrder(miner, waypointID));
             }
 
-            public void CheckMove(Miner miner)
+            bool CheckMinerPath(Miner miner)
             {
-                CheckPath(miner);
-
-                if (miner.CurrentWaypointID == miner.TargetWaypointID)
-                    return;
-
                 if (!miner.path.HasValue || (bool)miner.path?.isObstructed)
                 {
                     if (miner.path.HasValue)
                     {
-                        logger.Log($"Path of miner {miner.ID} is obstructed!");
+                        /*logger.Log($"Path of miner {miner.ID} is obstructed!");
 
                         string path = "";
                         foreach (int nodeID in miner.path?.path)
                             path += nodeID + ", ";
                         logger.Log($"Path is {path}");
+                        */
                     }
-                    else
-                        logger.Log($"Path for miner {miner.ID} not found!");
+                    else if (miner.CurrentWaypointID != miner.TargetWaypointID && miner.TargetWaypointID != -999)
+                    {
+                        bool PathIsBeingGenerated;
+                        Path? p = TryGetPath(GetNode(miner.CurrentWaypointID), GetNode(miner.TargetWaypointID), out PathIsBeingGenerated);
+
+                        if (p != null)
+                            miner.path = p;
+                        //else if (!PathIsBeingGenerated)
+                        //logger.Log($"Path for miner {miner.ID} not found!");
+                    }
 
 
 
-                    return;
+                    return false;
                 }
+                else if (miner.path?.path.Count == 0)
+                    return false;
+
+                return true;
+            }
+
+            void ClearReservedNodes(Miner miner)
+            {
+                if (NodesReservedByMiner.ContainsKey(miner.ID) && NodesReservedByMiner[miner.ID] != null)
+                {
+                    foreach (int id in NodesReservedByMiner[miner.ID])
+                        ReservedNodes.Remove(id);
+
+                    NodesReservedByMiner[miner.ID].Clear();
+                }
+                else
+                {
+                    NodesReservedByMiner.Add(miner.ID, new List<int>());
+                }
+            }
+
+            void AddReservedNode(Miner miner, int NodeID)
+            {
+                if (ReservedNodes.ContainsKey(NodeID))
+                    ReservedNodes[NodeID] = miner.ID;
+                else
+                    ReservedNodes.Add(NodeID, miner.ID);
+
+                if (!NodesReservedByMiner.ContainsKey(miner.ID))
+                    NodesReservedByMiner.Add(miner.ID, new List<int>());
+
+                NodesReservedByMiner[miner.ID].Add(NodeID);
+            }
+
+            void ReserveRampForMiner(Miner miner, int NodeID)
+            {
+                foreach (int id in GetNode(NodeID).Children)
+                    AddReservedNode(miner, id);
+            }
+
+            void ReserveNodeForMiner(Miner miner, int NodeID)
+            {
+                AddReservedNode(miner, NodeID);
+
+                if (GetNode(NodeID).IsRamp)
+                    ReserveRampForMiner(miner, NodeID);
+
+                if (GetNode(GetNode(NodeID).ParentID) != null && GetNode(GetNode(NodeID).ParentID).IsRamp)
+                    ReserveRampForMiner(miner, GetNode(NodeID).ParentID);
+            }
+
+            bool HasCommandIssuedToMoveToWaypoint(Miner miner, int nodeID)
+            {
+                foreach (string cmd in miner.CommandQueue)
+                {
+                    string[] cmdStringSplit = cmd.Split(';');
+                    int sentNodeID = int.Parse(cmdStringSplit[6]);
+
+                    if (sentNodeID == nodeID)
+                        return true;
+                }
+
+                return false;
+            }
+            public void CheckMove(Miner miner)
+            {
+                if (miner.CurrentWaypointID == miner.TargetWaypointID)
+                    return;
+
+                if (!CheckMinerPath(miner))
+                    return;
 
                 float dist_tgt = miner.path?.path.Count() > 1 ? PATH_NODE_DIST_TGT : FINAL_DIST_TGT;
                 int NextNodeID = (int)miner.path?.path[0];
+                int? NextNextNodeID = miner.path?.path.Count > 1 ? miner.path?.path[1] : null;
 
                 if (miner.Docked)
                     return;
 
-                if (!miner.busy/* && !NodeIsOccupied(NextNodeID, miner.ID) && (miner.path?.path.Count <= 1 || !NodeIsOccupied((int)miner.path?.path[1], miner.ID))*/)
+                if (!miner.busy && !HasCommandIssuedToMoveToWaypoint(miner, NextNodeID) && CanMinerMoveToNode(NextNodeID, miner.ID))
                 {
                     QueueGotoWaypoint(miner, NextNodeID);
                     logger.Log($"Moving {miner.ID} to {NextNodeID}");
-                }/*
-                else
-                {
-                    prog.display = "NEXT NODE OCCUPIED FOR MINER" + miner.ID;
+
+                    ClearReservedNodes(miner);
+                    ReserveNodeForMiner(miner, miner.CurrentWaypointID);
+                    ReserveNodeForMiner(miner, NextNodeID);
+
+                    if (NextNextNodeID != null && CanMinerMoveToNode((int)NextNextNodeID, miner.ID))
+                        ReserveNodeForMiner(miner, (int)NextNextNodeID);
                     return;
-                }*/
-                if (Vector3.Distance(miner.Pos.pos, GetNode(NextNodeID).Pose.pos.ToGlobal(WorldMatrix).pos) < GetNode(NextNodeID).precision)
+                }
+                else if (!miner.busy)
+                {
+                    //logger.Log($"Miner {miner.ID}'s path is blocked.");
+                    return;
+                }
+                if (Vector3.Distance(miner.Pos.pos, GetNode(NextNodeID).Pose.pos.ToGlobal(WorldMatrix).pos) < GetNode(NextNodeID).precision && CanMinerMoveToNode(NextNodeID, miner.ID))
                 {
                     logger.Log($"Miner {miner.ID} arrived at {NextNodeID}");
 
@@ -477,7 +644,11 @@ namespace IngameScript
                     miner.path?.path.RemoveAt(0);
 
                     if (miner.path?.path.Count == 0)
+                    {
                         miner.path = null;
+                        ClearReservedNodes(miner);
+                        ReserveNodeForMiner(miner, miner.CurrentWaypointID);
+                    }
                 }
             }
 
@@ -503,11 +674,28 @@ namespace IngameScript
                 return false;
             }
 
-            public bool NodeHasTraffic(int NodeID, long minerID = -1)
+            public bool CanMinerMoveToNode(int NodeID, long minerID)
+            {
+                foreach (Miner miner in prog.controller.Miners)
+                {
+                    if (miner.ID == minerID)
+                        continue;
+
+                    if (miner.CurrentWaypointID == NodeID || miner.TargetWaypointID == NodeID)
+                        return false;
+                }
+
+                if (ReservedNodes.ContainsKey(NodeID) && ReservedNodes[NodeID] != minerID)
+                    return false;
+
+                return true;
+            }
+
+            public bool NodeHasTraffic(int NodeID, long minerID = -1, List<int> path = null)
             {
                 foreach (MoveOrder o in OrderQueue)
                 {
-                    if (!o.isObstructed && (o.nodeID == NodeID || o.miner.CurrentWaypointID == NodeID) && o.miner.ID != minerID)
+                    if (!o.isObstructed && o.nodeID == NodeID && o.miner.ID != minerID)
                         return true;
                 }
 
@@ -522,8 +710,8 @@ namespace IngameScript
                     if (miner.path.HasValue && miner.path.Value.path != null && miner.path.Value.path.Count > 0)
                         foreach (int nID in miner.path.Value.path)
                         {
-                            //if (nID == Jobsite || GetNode(nID).precision >= 99)
-                            //    continue; //If node is a ramp area ignore it
+                            if (GetNode(nID).IsRamp)
+                                continue; //If node is a ramp area ignore it
 
                             if (nID == NodeID)
                                 return true;
@@ -533,21 +721,60 @@ namespace IngameScript
                 return false;
             }
 
-            public bool NodeIsOccupied(int NodeID, long minerID = -1)
+            public bool NodeIsOccupied(int NodeID, long minerID = -1, bool checkRampAreaOccupancy = true, bool callingFromRampAreaCheck = false)
             {
+                if (prog.controller.GetById(minerID).CurrentWaypointID == NodeID)
+                    return false;
+
+                if (checkRampAreaOccupancy && GetNode(NodeID).IsRamp)
+                {
+                    foreach (int childNodeID in GetNode(NodeID).Children)
+                    {
+                        if (NodeID == prog.controller.GetById(minerID).CurrentWaypointID || GetNode(NodeID).Children.Contains(prog.controller.GetById(minerID).CurrentWaypointID)) //Miner is already in ramp area
+                            break;
+
+                        if (NodeIsOccupied(childNodeID, minerID, false, true))
+                        {
+                            logger.Log($"Node {NodeID} is occupied because it is a ramp area and one of it's child nodes is occupied");
+                            return true;
+                        }
+                    }
+                }
+
+                if (checkRampAreaOccupancy && GetNode(GetNode(NodeID).ParentID) != null && GetNode(GetNode(NodeID).ParentID).IsRamp)
+                {
+                    foreach (int childNodeID in GetNode(GetNode(NodeID).ParentID).Children)
+                    {
+                        if (GetNode(NodeID).ParentID == prog.controller.GetById(minerID).CurrentWaypointID || GetNode(GetNode(NodeID).ParentID).Children.Contains(prog.controller.GetById(minerID).CurrentWaypointID)) //Miner is already in ramp area
+                            break;
+
+                        if (NodeIsOccupied(childNodeID, minerID, false, true))
+                        {
+                            logger.Log($"Node {NodeID} is occupied because it is a child of a ramp area and one of the ramp area's child nodes is occupied");
+                            return true;
+                        }
+                    }
+                }
+
+
                 foreach (Miner miner in prog.controller.Miners)
                 {
                     if (miner.ID == minerID)
                         continue;
 
                     if (miner.CurrentWaypointID == NodeID)
+                    {
+                        logger.Log($"Node {NodeID} is occupied because a miner is there");
                         return true;
+                    }
 
-                    
                     if (miner.path.HasValue && miner.path.Value.path != null && miner.path.Value.path.Count > 0)
                     {
                         if (miner.path?.path[0] == NodeID)
+                        {
+                            logger.Log($"Node {NodeID} is occupied because a miner is about to move there");
                             return true;
+                        }
                         continue;
                         if (miner.path?.path.Count > 1 && miner.path?.path[1] == NodeID)
                             return true;
@@ -564,7 +791,52 @@ namespace IngameScript
                     //if (path.path.IndexOf(id) == 0 || id == Jobsite || GetNode(id).precision >= 99)
                     //    continue; //If node is a ramp area ignore it
 
-                    if (NodeHasTraffic(id, minerID))
+                    /*if (NodeHasTraffic(id, minerID))
+                        return false;*/
+
+                    foreach (Miner miner in prog.controller.Miners)
+                    {
+                        if (miner.ID == minerID)
+                            continue;
+
+                        if (miner.CurrentWaypointID == id && miner.CurrentWaypointID == miner.TargetWaypointID)
+                            return false;
+
+                        if (miner.path.HasValue && miner.path.Value.path != null && miner.path.Value.path.Count > 0)
+                        {
+                            foreach (int nID in miner.path.Value.path)
+                            {
+                                if (GetNode(nID).IsRamp)
+                                    continue; //If node is a ramp area ignore it
+
+                                if (nID == id) //Ensure that the paths won't block each other
+                                {
+                                    if (!CanPass(miner.path.Value.path, path.path, nID, id))
+                                    {
+                                        //logger.Log($"Miner {minerID} will block miner {miner.ID} if it starts to move.");
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return true;
+            }
+
+            bool CanPass(List<int> path1, List<int> path2, int id1, int id2)
+            {
+                int path1index = path1.IndexOf(id1);
+                int path2index = path2.IndexOf(id2);
+                if (path1.Count > path1index && path2index > 0)
+                {
+                    if (path1[path1index + 1] == path2[path2index - 1])
+                        return false;
+                }
+                else if (path1index > 0 && path2.Count > path2index)
+                {
+                    if (path1[path1index - 1] == path2[path2index + 1])
                         return false;
                 }
 
@@ -619,6 +891,29 @@ namespace IngameScript
                 nodeID = n;
                 isObstructed = false;
                 displayStatus = "IN QUEUE";
+            }
+        }
+
+        public struct PathfindData
+        {
+            public int from;
+            public int to;
+            public PathfindData(int f, int t)
+            {
+                from = f;
+                to = t;
+            }
+        }
+
+        public struct ReservedNodeData
+        {
+            public int NodeID;
+            public int MinerID;
+
+            public ReservedNodeData(int NodeToReserve, int ReservedBy)
+            {
+                NodeID = NodeToReserve;
+                MinerID = ReservedBy;
             }
         }
     }

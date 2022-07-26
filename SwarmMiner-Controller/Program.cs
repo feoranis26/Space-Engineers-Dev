@@ -103,24 +103,40 @@ namespace IngameScript
             comms.Tick(updateSource);
             controller.Tick(updateSource);
 
+            Echo("\n\n");
             Echo("Miner positions   : ");
             foreach (Miner miner in controller.Miners)
                 Echo($"Miner {miner.ID}: NODE {miner.CurrentWaypointID}, {nav.GetNode(miner.CurrentWaypointID).DisplayName}");
 
+            Echo("\n\n");
             Echo("Miner cmds        : ");
             foreach (Miner miner in controller.Miners)
                 Echo($"Miner {miner.ID}: Q/E: {miner.CommandQueue.Count}/{miner.currentCommandNum}");
 
+            Echo("\n\n");
             Echo("Miner states      : ");
             foreach (Miner miner in controller.Miners)
                 Echo($"Miner {miner.ID}: S/P: {miner.State}/{miner.prevState}");
 
+            Echo("\n\n");
             Echo("Miner targets     : ");
             foreach (Miner miner in controller.Miners)
                 Echo($"Miner {miner.ID}: {miner.TargetWaypointID}");
 
+            Echo("\n\n");
             foreach (MoveOrder o in nav.OrderQueue)
-                Echo($"Move order #{o.miner.ID}: from {o.miner.CurrentWaypointID} to {o.nodeID}, is obstructed: {o.isObstructed}.");
+                Echo($"Move order #{o.miner.ID}: from {o.miner.CurrentWaypointID} to {o.nodeID}, status: {o.displayStatus}.");
+
+            Echo("\n\n");
+            foreach (PathfindData dat in nav.PathfindQueue)
+                Echo($"Pathfind queue: from {dat.from} to {dat.to}");
+
+            Echo("\n\n");
+            string reservedNodes = "";
+            foreach (int nodeID in nav.ReservedNodes.Keys)
+                reservedNodes += $" {nodeID} for {nav.ReservedNodes[nodeID]}, ";
+
+            Echo($"Reserved nodes: {reservedNodes}");
 
             string logs = log.Display(DateTime.Now - new TimeSpan(0, 0, 10));
             Echo(logs);
@@ -133,13 +149,13 @@ namespace IngameScript
             {
                 debug.RemoveDraw();
 
-                if(drawDebug)
+                if (drawDebug)
                     nav.DrawVisuals();
 
                 Job.Visualize();
             }
 
-            if((updateSource & UpdateType.Update100) > 0)
+            if ((updateSource & UpdateType.Update100) > 0)
             {
                 Job.CheckJobs();
             }

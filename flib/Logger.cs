@@ -29,8 +29,7 @@ namespace IngameScript
             public string Display(DateTime? since = null, List<Logger> filter = null)
             {
                 string display = "";
-
-                foreach(LogEntry entry in entries)
+                foreach (LogEntry entry in entries)
                 {
                     if (since.HasValue && entry.entryTime < since.Value)
                         continue;
@@ -51,12 +50,12 @@ namespace IngameScript
 
             public void AddLog(LogEntry e)
             {
-                entries.Add(e);
+                entries.Insert(0, e);
             }
         }
         public class Logger
         {
-            public Log log;
+            Log log;
             public string Name;
 
             public Logger(Log l, string n)
@@ -72,7 +71,7 @@ namespace IngameScript
             }
         }
 
-        public class LogEntry
+        public struct LogEntry
         {
             public string message;
             public DateTime entryTime;

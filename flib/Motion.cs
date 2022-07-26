@@ -155,7 +155,7 @@ namespace IngameScript
 
                 float alignment = Vector3.Dot(-forward, new LocalDir(Vector3.Forward).ToGlobal(rc.WorldMatrix).forward);
 
-                if(alignment < 0)
+                if(alignment < -0.9)
                     globalVector.Y = (float)Math.PI * 2 - globalVector.Y;
 
                 float roll = (float)Math.Asin(Vector3D.Dot(rc.WorldMatrix.Right, up));

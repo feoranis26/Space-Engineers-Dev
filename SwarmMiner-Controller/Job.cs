@@ -147,8 +147,8 @@ namespace IngameScript
                         List<int> Children = new List<int>();
                         Children.Add(NodeID);
 
-                        PathNode NavNode = new PathNode(nav_pose, NavID, Jobsite.ID, Children, $"Drillsite nav #{Holes.Count}");
-                        PathNode Node = new PathNode(site_pose, NodeID, NavID, new List<int>(), $"Drillsite #{Holes.Count}");
+                        PathNode NavNode = new PathNode(nav_pose, NavID, Jobsite.ID, Children, $"Drillsite nav #{Holes.Count}", false);
+                        PathNode Node = new PathNode(site_pose, NodeID, NavID, new List<int>(), $"Drillsite #{Holes.Count}", false);
                         DrillSite site = new DrillSite(site_pos, Size.Z, Node, NavNode);
 
                         NavNode.precision = 2;

@@ -34,6 +34,8 @@ namespace IngameScript
         string UNRESERVE_ARGUMENT = "%remove_reserve";
         string SWITCH_RESERVE_ARGUMENT = "%switch_reserve";
 
+        string SHIP_ARRIVED_ARGUMENT = "%shipArrived";
+
         string ASSIGN_DOCKNUM_ARGUMENT = "%docknum";
 
         public int dockNum = 0;
@@ -41,6 +43,7 @@ namespace IngameScript
         bool changing = false;
         bool available { get { return !changing && open && !isOccupied() && !reserved; } }
         bool reserved = false;
+        bool shipPresent = false;
 
         IMyPistonBase piston;
         List<IMyAirtightHangarDoor> doors;
@@ -103,13 +106,15 @@ namespace IngameScript
             if (reserved && isOccupied())
                 reserved = false;
 
-            if(changing && doors.All((d) => d.Status == DoorStatus.Open))
+            shipPresent = shipPresent && reserved || isOccupied();
+
+            if (changing && doors.All((d) => d.Status == DoorStatus.Open))
             {
                 changing = false;
                 open = true;
             }
 
-            piston.Velocity = reserved || isOccupied() ? 2 : -2;
+            piston.Velocity = shipPresent ? 2 : -2;
 
             Me.CustomData = (available ? "AVAILABLE" : "UNAVAILABLE") + "\n" + (reserved ? "RESERVED" : "NOT RESERVED") + "\n" + (open ? "OPEN" : "CLOSED");
         }
@@ -206,7 +211,8 @@ namespace IngameScript
                 reserved = false;
             else if (split[0] == SWITCH_RESERVE_ARGUMENT)
                 reserved = reserved ? false : available;
-
+            else if (split[0] == SHIP_ARRIVED_ARGUMENT)
+                shipPresent = true;
         }
 
         void AddBlocks()

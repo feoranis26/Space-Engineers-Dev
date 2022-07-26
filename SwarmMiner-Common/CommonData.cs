@@ -44,6 +44,7 @@ namespace IngameScript
             public int ID;
             public int ParentID;
             public List<int> Children;
+            public bool IsRamp;
             public float precision = 5;
 
             public string AirlockPBName;
@@ -51,13 +52,14 @@ namespace IngameScript
 
             public string DisplayName;
 
-            public PathNode(LocalPose pose, int id, int parent, List<int> children, string displayName)
+            public PathNode(LocalPose pose, int id, int parent, List<int> children, string displayName, bool isRamp)
             {
                 Pose = pose;
                 ID = id;
                 ParentID = parent;
                 Children = children;
                 DisplayName = displayName;
+                IsRamp = isRamp;
             }
         }
         public enum MinerState

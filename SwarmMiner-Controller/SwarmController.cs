@@ -81,13 +81,23 @@ namespace IngameScript
 
             void Control()
             {
+                if (!CheckForUnknownMiners())
+                    return;
+
                 if (Job.State == SystemState.Halt)
                     return;
 
                 switch (Job.State)
                 {
                     case SystemState.Stopped:
-                        MoveAllMinersToHangar();
+                        foreach (Miner m in Miners)
+                        {
+                            if (m.State == MinerState.NotConnected || m.State == MinerState.Unknown)
+                                continue;
+
+                            if (m.State != MinerState.CargoFull && m.State != MinerState.H2Low && m.State != MinerState.OutOfCharge && m.State != MinerState.Ejecting)
+                                MoveMinerToHangar(m);
+                        }
                         break;
 
                     case SystemState.Running:
@@ -98,9 +108,7 @@ namespace IngameScript
                                     MoveMinerToHangar(m);
 
                         if (Job.IsDone())
-                        {
                             Job.State = SystemState.Stopped;
-                        }
                         break;
                 }
             }
@@ -175,6 +183,10 @@ namespace IngameScript
                 if (nav.HangarDocks.Contains(miner.CurrentWaypointID))
                     return;
 
+                foreach (MoveOrder o in nav.OrderQueue)
+                    if (nav.HangarDocks.Contains(o.nodeID))
+                        return;
+
                 int dockID = nav.GetEmptyHangarDock(miner);
 
                 if (dockID != -1 && !miner.busy)
@@ -187,6 +199,10 @@ namespace IngameScript
             {
                 if (nav.Docks.Contains(miner.CurrentWaypointID))
                     return;
+
+                foreach(MoveOrder o in nav.OrderQueue)
+                    if (nav.Docks.Contains(o.nodeID))
+                        return;
 
                 int dockID = nav.GetEmptyDock(miner);
 
@@ -232,6 +248,9 @@ namespace IngameScript
 
                     if ((nav.HangarDocks.Contains(miner.CurrentWaypointID) || nav.Docks.Contains(miner.CurrentWaypointID)) && miner.TargetWaypointID == miner.CurrentWaypointID && !miner.Docked && !miner.busy)
                         miner.Dock();
+
+                    if(!miner.busy && nav.Docks.Contains(miner.CurrentWaypointID) && DockControllers.ContainsKey(miner.CurrentWaypointID))
+                        DockControllers[miner.CurrentWaypointID].TryRun("%shipArrived");
                 }
 
                 /*
