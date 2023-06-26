@@ -5,11 +5,11 @@
     You can safely exclude this file from code repositories and use different 
     user settings per machine.
     -->
-    <MDKVersion>1.4.12</MDKVersion>
+    <MDKVersion>1.4.14</MDKVersion>
     <MDKUseGameBinPath>yes</MDKUseGameBinPath>
-    <MDKGameBinPath>E:\SteamLibrary\steamapps\common\SpaceEngineers\Bin64</MDKGameBinPath>
-    <MDKInstallPath>c:\users\alp d\appdata\local\microsoft\visualstudio\16.0_c0d53170\extensions\445l1ibp.kjm</MDKInstallPath>
-    <MDKOutputPath>C:\Users\Alp D\AppData\Roaming\SpaceEngineers\IngameScripts\local</MDKOutputPath>
+    <MDKGameBinPath>c:\program files (x86)\steam\SteamApps\common\SpaceEngineers\Bin64</MDKGameBinPath>
+    <MDKInstallPath>c:\users\alpdo\appdata\local\microsoft\visualstudio\17.0_b46bfcbf\extensions\ylovx5ik.mgp</MDKInstallPath>
+    <MDKOutputPath>C:\Users\alpdo\AppData\Roaming\SpaceEngineers\IngameScripts\local</MDKOutputPath>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Sandbox.Common">

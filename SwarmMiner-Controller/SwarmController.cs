@@ -59,7 +59,7 @@ namespace IngameScript
                         IMyProgrammableBlock PB = p.gridUtils.GetBlockWithTag<IMyProgrammableBlock>($"[SWM {dockName}]");
                         DockControllers.Add(id, PB);
                     }
-                    catch(MissingBlockException)
+                    catch (MissingBlockException)
                     {
 
                     }
@@ -85,7 +85,12 @@ namespace IngameScript
                     return;
 
                 if (Job.State == SystemState.Halt)
+                {
+                    foreach (Miner m in Miners)
+                        nav.StopMiner(m);
+
                     return;
+                }
 
                 switch (Job.State)
                 {
@@ -105,7 +110,7 @@ namespace IngameScript
 
                         foreach (Miner m in Miners)
                             if (m.job == null && m.IsIdle())
-                                    MoveMinerToHangar(m);
+                                MoveMinerToHangar(m);
 
                         if (Job.IsDone())
                             Job.State = SystemState.Stopped;
@@ -200,7 +205,7 @@ namespace IngameScript
                 if (nav.Docks.Contains(miner.CurrentWaypointID))
                     return;
 
-                foreach(MoveOrder o in nav.OrderQueue)
+                foreach (MoveOrder o in nav.OrderQueue)
                     if (nav.Docks.Contains(o.nodeID))
                         return;
 
@@ -249,7 +254,7 @@ namespace IngameScript
                     if ((nav.HangarDocks.Contains(miner.CurrentWaypointID) || nav.Docks.Contains(miner.CurrentWaypointID)) && miner.TargetWaypointID == miner.CurrentWaypointID && !miner.Docked && !miner.busy)
                         miner.Dock();
 
-                    if(!miner.busy && nav.Docks.Contains(miner.CurrentWaypointID) && DockControllers.ContainsKey(miner.CurrentWaypointID))
+                    if (!miner.busy && nav.Docks.Contains(miner.CurrentWaypointID) && DockControllers.ContainsKey(miner.CurrentWaypointID))
                         DockControllers[miner.CurrentWaypointID].TryRun("%shipArrived");
                 }
 
@@ -298,7 +303,7 @@ namespace IngameScript
                         if (miner.busy)
                             miner.Abort();
 
-                        if(miner.State != MinerState.Ejecting)
+                        if (miner.State != MinerState.Ejecting)
                             MoveMinerToDock(miner);
                     }
                 }

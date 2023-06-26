@@ -165,6 +165,9 @@ namespace IngameScript
                 //prog.debug.DrawGPS(node.DisplayName, node.Pose.pos.ToGlobal(WorldMatrix).pos, Color.White);
                 prog.debug.DrawLine(pos, pos + node.Pose.rot.ToGlobal(WorldMatrix).forward, Color.Blue, 0.05f);
                 prog.debug.DrawLine(pos, pos + node.Pose.rot.ToGlobal(WorldMatrix).up, Color.Blue, 0.05f);
+
+                if (ReservedNodes.ContainsKey(node.ID))
+                    prog.debug.DrawSphere(new BoundingSphereD(pos, 1), Color.Red);
             }
             void ParseNodes(string data)
             {
@@ -462,7 +465,12 @@ namespace IngameScript
                 {
                     o.miner.TargetWaypointID = o.nodeID;
                     o.miner.path = p;
-                    logger.Log($"Starting move of miner {o.miner.ID} to {o.nodeID}");
+
+                    string path = "";
+                    foreach (int n in p.Value.path)
+                        path += $"{n}, ";
+
+                    logger.Log($"Starting move of miner {o.miner.ID} to {o.nodeID} with path: " + path);
                 }
                 else if (pathPresent)
                 {
@@ -508,6 +516,30 @@ namespace IngameScript
                 //return false;
 
                 OrderQueue.Add(new MoveOrder(miner, waypointID));
+            }
+
+            public void StopMiner(Miner miner)
+            {
+                MoveOrder[] temp_orders = new MoveOrder[100];
+                OrderQueue.CopyTo(temp_orders);
+
+                foreach (MoveOrder o in temp_orders)
+                {
+                    if (o == null)
+                        break;
+
+                    if (o.miner == miner)
+                        OrderQueue.Remove(o);
+                }
+
+
+                if(miner.path?.path.Count > 0)
+                {
+                    miner.TargetWaypointID = miner.path.Value.path[0];
+                    miner.path?.path.RemoveRange(1, miner.path.Value.path.Count - 1);
+                }
+                else
+                    miner.TargetWaypointID = miner.CurrentWaypointID;
             }
 
             bool CheckMinerPath(Miner miner)
@@ -595,6 +627,10 @@ namespace IngameScript
                 foreach (string cmd in miner.CommandQueue)
                 {
                     string[] cmdStringSplit = cmd.Split(';');
+
+                    if (cmdStringSplit[0] != "Goto")
+                        continue;
+
                     int sentNodeID = int.Parse(cmdStringSplit[6]);
 
                     if (sentNodeID == nodeID)
